@@ -89,7 +89,7 @@ fn init() {
         .with_default_directive(LevelFilter::WARN.into())
         .from_env()
         .unwrap()
-        .add_directive("malachite_simulator=info".parse().unwrap());
+        .add_directive("malachite_simulator=trace".parse().unwrap());
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)

@@ -50,7 +50,7 @@ impl SystemSimulator {
     /// Creates a new system simulator consisting of `size` number of peers.
     /// Each peer is a validator in the system.
     ///
-    /// Assumes the size of the system is >= 4 and < 10.
+    /// Assumes the size of the system is >= 4 and < 25.
     pub fn new(
         size: u32,
     ) -> (
@@ -60,7 +60,7 @@ impl SystemSimulator {
         Receiver<Decision>,     // Decisions (output of the system)
     ) {
         assert!(size >= 4);
-        assert!(size < 10);
+        assert!(size < 25);
 
         // Construct the simulated network
         let (ntx, nrx) = mpsc::channel();

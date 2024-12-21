@@ -10,6 +10,7 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 crossbeam-channel = "0.5.13"
 ed25519-consensus = "2.1.0"
+bytes = "1.9.0"
 
 malachite-core-consensus = {version = "0.0.1", package = "informalsystems-malachitebft-core-consensus"}
 malachite-core-types = {version = "0.0.1", package = "informalsystems-malachitebft-core-types"}

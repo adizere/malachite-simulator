@@ -1,4 +1,4 @@
-use malachite_core_types::{Extension, NilOrVal, Round, SignedExtension, VoteType};
+use malachite_core_types::{NilOrVal, Round, SignedExtension, VoteType};
 use std::fmt;
 
 use crate::context::address::BasePeerAddress;
@@ -13,12 +13,14 @@ pub struct BaseVote {
     pub value_id: NilOrVal<BaseValueId>,
     pub round: Round,
     pub voter: BasePeerAddress,
-    pub extension: Option<Extension>,
+    pub extension: Option<SignedExtension<BaseContext>>,
 }
 
 impl BaseVote {
     // TODO: Similar to how we do it for `BaseProposal`, serialize only
-    //  the height here as a quick prototype
+    //  the height here as a quick prototype.
+    // This is fine because we use `to_bytes`` only to get the payload to sign, not for
+    // networking payloads.
     pub fn to_bytes(&self) -> [u8; size_of::<u64>()] {
         self.height.0.to_be_bytes()
     }
@@ -28,8 +30,8 @@ impl fmt::Display for BaseVote {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{:?} / {} / {} / {:?} / {}",
-            self.vote_type, self.height, self.round, self.value_id, self.voter
+            "{:?} / {} / {} / {:?} / {} X[{:?}]",
+            self.vote_type, self.height, self.round, self.value_id, self.voter, self.extension
         )
     }
 }
@@ -62,14 +64,13 @@ impl malachite_core_types::Vote<BaseContext> for BaseVote {
     }
 
     fn extension(&self) -> Option<&SignedExtension<BaseContext>> {
-        None
+        self.extension.as_ref()
     }
 
-    fn extend(self, _extension: SignedExtension<BaseContext>) -> Self {
-        todo!()
-        // Self {
-        //     extension: Some(*extension),
-        //     ..self
-        // }
+    fn extend(self, extension: SignedExtension<BaseContext>) -> Self {
+        Self {
+            extension: Some(extension),
+            ..self
+        }
     }
 }

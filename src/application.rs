@@ -175,6 +175,11 @@ impl Application {
         certificate: CommitCertificate<BaseContext>,
         peer_params: &Params<BaseContext>,
     ) -> Result<Resume<BaseContext>, String> {
+        println!("decision arrived!");
+        for s in certificate.aggregated_signature.signatures.iter() {
+            println!("signature from {:?} with ext {:?}", s.address, s.extension);
+        }
+
         // Let the top-level system/environment know about this decision
         self.decision_tx
             .send(Decision {
@@ -234,7 +239,7 @@ impl Application {
         assert_eq!(peer_params.address, self.peer_id);
 
         let peer_id = peer_params.address;
-        let span = span!(Level::INFO, "handle_effect", "{}", peer_id.0);
+        let span = span!(Level::INFO, "handle_effect for peer", "{}", peer_id.0);
         let _enter = span.enter();
 
         match effect {
