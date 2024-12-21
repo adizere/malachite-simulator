@@ -1,12 +1,10 @@
-use bytes::Bytes;
 use rand::rngs::OsRng;
 use tracing::debug;
 
-use malachite_core_types::{Extension, SignedMessage, SigningProvider, Vote, VoteType};
+use malachite_core_types::{Extension, SignedMessage, SigningProvider, Vote};
 
 use super::{
-    signing_scheme::{PrivateKey, PublicKey},
-    BaseContext,
+    signing_scheme::{PrivateKey, PublicKey}, value::BaseValue, vote::BaseVote, BaseContext
 };
 use crate::context::signing_scheme::Ed25519;
 
@@ -30,6 +28,22 @@ impl BaseSigningProvider {
     pub fn public_key(&self) -> PublicKey {
         self.private_key.public_key()
     }
+
+    pub fn sign_vote_extended(&self, vote: BaseVote, ex: Option<BaseValue>) -> SignedMessage<BaseContext,BaseVote> {
+        let vote = match ex {
+            Some(value) => {
+                let extension = Extension::new(value.to_bytes());
+                let ext_signature = self.private_key.sign(&extension.data);
+                let vote_wext = vote.extend(SignedMessage::new(extension, ext_signature));
+                println!("added ext to {:?} at peer {}: {:?}", vote_wext.vote_type, vote_wext.voter, vote_wext.extension);
+
+                vote_wext
+            },
+            None => vote,
+        };
+        
+        self.sign_vote(vote)
+    }
 }
 
 #[allow(unused)]
@@ -41,18 +55,6 @@ impl SigningProvider<BaseContext> for BaseSigningProvider {
         BaseContext,
         <BaseContext as malachite_core_types::Context>::Vote,
     > {
-        let vote = if vote.vote_type == VoteType::Precommit
-        {
-            let extension = Extension::new(Bytes::from("test ext"));
-            let ext_signature = self.private_key.sign(&extension.data);
-            let vote_wext = vote.extend(SignedMessage::new(extension, ext_signature));
-            println!("added ext to {:?} at peer {}: {:?}", vote_wext.vote_type, vote_wext.voter, vote_wext.extension);
-
-            vote_wext
-        } else {
-            vote
-        };
-
         let signature = self.private_key.sign(&vote.to_bytes());
         SignedMessage::new(vote, signature)
     }

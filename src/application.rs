@@ -8,7 +8,7 @@ use malachite_core_consensus::{
 };
 use malachite_core_types::{
     CommitCertificate, Height, Round, SignedMessage, SigningProvider, Timeout, TimeoutKind,
-    Validator, Validity, ValueOrigin,
+    Validator, Validity, ValueOrigin, VoteType,
 };
 use malachite_metrics::Metrics;
 
@@ -18,6 +18,7 @@ use crate::context::peer_set::BasePeerSet;
 use crate::context::value::BaseValue;
 use crate::context::BaseContext;
 use crate::decision::Decision;
+use crate::multi::MultiProposer;
 
 /// Represents an [`Input`] message that the application logic
 /// at a certain peers sends to another peer, potentially to self.
@@ -56,6 +57,12 @@ pub struct Application {
 
     // Consume the possible values that will be proposed
     pub proposal_rx: cbc::Receiver<BaseValue>,
+}
+
+impl MultiProposer for Application {
+    fn get_proposal_part(&self, _h: BaseHeight, _r: Round) -> BaseValue {
+        return BaseValue(144);
+    }
 }
 
 impl Application {
@@ -323,7 +330,13 @@ impl Application {
                 Ok(c.resume_with(()))
             }
             Effect::SignVote(v, c) => {
-                let sv = context.signing_provider.sign_vote(v);
+                let ext = if v.vote_type == VoteType::Precommit {
+                    let part = self.get_proposal_part(v.height, v.round);
+                    Some(part)
+                } else {
+                    None
+                };
+                let sv = context.signing_provider.sign_vote_extended(v, ext);
 
                 Ok(c.resume_with(sv))
             }

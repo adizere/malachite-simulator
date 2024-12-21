@@ -27,6 +27,7 @@ mod common;
 mod context;
 mod decision;
 mod simulator;
+mod multi;
 
 fn main() {
     // Some sensible defaults to make logging work
