@@ -1,0 +1,16 @@
+[package]
+name = "malachite-simulator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8.5"
+signature = "2.2.0"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+crossbeam-channel = "0.5.13"
+ed25519-consensus = "2.1.0"
+
+malachite-core-consensus = {version = "0.0.1", package = "informalsystems-malachitebft-core-consensus"}
+malachite-core-types = {version = "0.0.1", package = "informalsystems-malachitebft-core-types"}
+malachite-metrics = {version = "0.0.1", package = "informalsystems-malachitebft-metrics"}
