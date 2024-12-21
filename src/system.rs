@@ -21,17 +21,17 @@ use crate::decision::Decision;
 /// The delay between each consecutive step the system takes.
 pub const STEP_DELAY: Duration = Duration::from_millis(200);
 
-/// A system represents:
+/// A system simulator represents:
 ///
 /// - The state of all peers, namely params, metrics, application logic.
-/// - The environment for executing the loopback application and producing decisions.
+/// - The environment for executing the application and producing decisions.
 ///
 /// Upon triggering `run`, the system will:
 ///
 /// - Pick arbitrary peers,
 /// - Execute the peer's local state, e.g., send consensus messages, verify signatures.
 /// - Eventually produce decisions that are streamed to outside the system through a `Receiver`.
-pub struct System {
+pub struct SystemSimulator {
     /// Params of each peer.
     params: HashMap<BasePeerAddress, Params<BaseContext>>,
 
@@ -46,15 +46,15 @@ pub struct System {
     network_rx: Receiver<Envelope>,
 }
 
-impl System {
-    /// Creates a new system consisting of `size` number of peers.
+impl SystemSimulator {
+    /// Creates a new system simulator consisting of `size` number of peers.
     /// Each peer is a validator in the system.
     ///
     /// Assumes the size of the system is >= 4 and < 10.
     pub fn new(
         size: u32,
     ) -> (
-        System,
+        SystemSimulator,
         Vec<State<BaseContext>>,
         cbc::Sender<BaseValue>, // Proposals (input to the system)
         Receiver<Decision>,     // Decisions (output of the system)
@@ -79,7 +79,7 @@ impl System {
 
         // Construct the set of peers that comprise the network
         let ctx = BaseContext::new();
-        let val_set = BasePeerSet::new(size);
+        let val_set = BasePeerSet::new(size, ctx.shared_public_key());
 
         // Construct the consensus states and params for each peer
         for i in 0..size {
@@ -115,7 +115,7 @@ impl System {
         }
 
         (
-            System {
+            SystemSimulator {
                 params,
                 metrics: HashMap::new(), // Initialize later, at `bootstrap` time
                 apps,
@@ -245,14 +245,14 @@ impl System {
 #[cfg(test)]
 mod tests {
     use crate::context::value::BaseValue;
-    use crate::system::System;
+    use crate::system::SystemSimulator;
     use std::time::Duration;
 
     #[test]
     fn basic_proposal_decisions() {
         let value = BaseValue(45);
 
-        let (mut n, mut states, proposals, decisions) = System::new(4);
+        let (mut n, mut states, proposals, decisions) = SystemSimulator::new(4);
 
         proposals
             .send(value)

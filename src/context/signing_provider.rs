@@ -1,13 +1,33 @@
-use malachite_core_types::SigningProvider;
+use rand::rngs::OsRng;
+use tracing::debug;
 
-use super::BaseContext;
+use malachite_core_types::{SignedMessage, SigningProvider};
+
+use super::{
+    signing_scheme::{PrivateKey, PublicKey},
+    BaseContext,
+};
+use crate::context::signing_scheme::Ed25519;
 
 #[derive(Clone)]
-pub struct BaseSigningProvider {}
+pub struct BaseSigningProvider {
+    private_key: PrivateKey,
+}
 
 impl BaseSigningProvider {
     pub fn new() -> BaseSigningProvider {
-        Self {}
+        let csprng = OsRng;
+        let signing_key = Ed25519::generate_keypair(csprng);
+
+        debug!(public_key = ?signing_key.public_key(), "created new signing provider");
+
+        Self {
+            private_key: signing_key,
+        }
+    }
+
+    pub fn public_key(&self) -> PublicKey {
+        self.private_key.public_key()
     }
 }
 
@@ -20,7 +40,8 @@ impl SigningProvider<BaseContext> for BaseSigningProvider {
         BaseContext,
         <BaseContext as malachite_core_types::Context>::Vote,
     > {
-        todo!()
+        let signature = self.private_key.sign(&vote.to_bytes());
+        SignedMessage::new(vote, signature)
     }
 
     fn verify_signed_vote(
@@ -39,7 +60,8 @@ impl SigningProvider<BaseContext> for BaseSigningProvider {
         BaseContext,
         <BaseContext as malachite_core_types::Context>::Proposal,
     > {
-        todo!()
+        let signature = self.private_key.sign(&proposal.to_bytes());
+        SignedMessage::new(proposal, signature)
     }
 
     fn verify_signed_proposal(

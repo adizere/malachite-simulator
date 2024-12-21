@@ -6,6 +6,7 @@ use peer::BasePeer;
 use peer_set::BasePeerSet;
 use proposals::{BaseProposal, BaseProposalPart};
 use signing_provider::BaseSigningProvider;
+use signing_scheme::PublicKey;
 use value::BaseValue;
 use vote::BaseVote;
 
@@ -20,6 +21,10 @@ pub mod signing_scheme;
 pub mod value;
 pub mod vote;
 
+/// The context is shared across all the peers in the simulated network.
+/// The signing provider within the context is also shared across all peers.
+/// This means all peers have the same signing key: big assumption, but
+/// inconsequential for the simulated environment here.
 #[derive(Clone)]
 pub struct BaseContext {
     pub signing_provider: BaseSigningProvider,
@@ -30,6 +35,11 @@ impl BaseContext {
         BaseContext {
             signing_provider: BaseSigningProvider::new(),
         }
+    }
+
+    // Get the public key that all peers share.
+    pub fn shared_public_key(&self) -> PublicKey {
+        self.signing_provider.public_key()
     }
 }
 

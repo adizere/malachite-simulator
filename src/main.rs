@@ -19,7 +19,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::context::value::BaseValue;
 use crate::decision::Decision;
-use crate::system::System;
+use crate::system::SystemSimulator;
 
 mod application;
 mod common;
@@ -32,7 +32,7 @@ fn main() {
     init();
 
     // Create a network of 4 peers
-    let (mut n, mut states, proposals, decisions) = System::new(4);
+    let (mut n, mut states, proposals, decisions) = SystemSimulator::new(4);
 
     // Spawn a thread that produces values to be proposed
     produce_proposals_background(proposals);
@@ -88,7 +88,7 @@ fn init() {
         .with_default_directive(LevelFilter::WARN.into())
         .from_env()
         .unwrap()
-        .add_directive("loopback=info".parse().unwrap());
+        .add_directive("malachite_simulator=info".parse().unwrap());
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)

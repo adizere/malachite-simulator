@@ -3,12 +3,12 @@ use std::sync::mpsc::Sender;
 use tracing::{debug, info, span, trace, Level};
 
 use malachite_core_consensus::{
-    ConsensusMsg, Effect, Error, Input, Params, ProposedValue, Resumable, Resume, SignedConsensusMsg, State, ValueToPropose
+    ConsensusMsg, Effect, Error, Input, Params, ProposedValue, Resumable, Resume,
+    SignedConsensusMsg, State, ValueToPropose,
 };
 use malachite_core_types::{
-    CommitCertificate, Height, Round, SignedMessage, Timeout, TimeoutKind, Validator,
-    Validity, ValueOrigin,
-    SigningProvider
+    CommitCertificate, Height, Round, SignedMessage, SigningProvider, Timeout, TimeoutKind,
+    Validator, Validity, ValueOrigin,
 };
 use malachite_metrics::Metrics;
 
@@ -205,10 +205,7 @@ impl Application {
     // Register this input in the inbox of the current validator.
     // If no value is available, the application blocks waiting.
     fn handle_get_value(&self, h: BaseHeight, r: Round) -> Result<Resume<BaseContext>, String> {
-        let value = self
-            .proposal_rx
-            .try_recv()
-            .or_else(|_| Err("no value"))?;
+        let value = self.proposal_rx.try_recv().or_else(|_| Err("no value"))?;
 
         let input_value = ValueToPropose {
             height: h,
@@ -311,7 +308,6 @@ impl Application {
             }
             Effect::RestreamValue(_, _, _, _, _, _c) => {
                 panic!("unimplemented arm Effect::RestreamValue in match effect");
-
             }
             Effect::PersistMessage(_, c) => {
                 // No support for crash-recovery
@@ -323,12 +319,12 @@ impl Application {
             }
             Effect::SignVote(v, c) => {
                 let sv = context.signing_provider.sign_vote(v);
-                
+
                 Ok(c.resume_with(sv))
             }
             Effect::SignProposal(p, c) => {
                 let sp = context.signing_provider.sign_proposal(p);
-                
+
                 Ok(c.resume_with(sp))
             }
             Effect::GetVoteSet(_, _, _) => {

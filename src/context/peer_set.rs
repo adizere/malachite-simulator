@@ -3,9 +3,9 @@
 use std::cmp::PartialEq;
 use tracing::warn;
 
-use crate::context::address::BasePeerAddress;
 use crate::context::peer::BasePeer;
 use crate::context::BaseContext;
+use crate::context::{address::BasePeerAddress, signing_scheme::PublicKey};
 
 use malachite_core_types::{ValidatorSet, VotingPower};
 
@@ -18,11 +18,11 @@ pub struct BasePeerSet {
 
 impl BasePeerSet {
     /// Create a new set of peers of cardinality `size`.
-    pub fn new(size: u32) -> Self {
+    pub fn new(size: u32, public_key: PublicKey) -> Self {
         let mut peers = vec![];
 
         for i in 0..size {
-            let peer = BasePeer::new(i);
+            let peer = BasePeer::new(i, public_key);
             warn!(peer = %i, "created");
 
             peers.push(peer);

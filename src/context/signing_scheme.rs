@@ -46,14 +46,6 @@ impl Signature {
     pub fn to_bytes(&self) -> [u8; 64] {
         self.0.to_bytes()
     }
-
-    pub fn from_bytes(bytes: [u8; 64]) -> Self {
-        Self(ed25519_consensus::Signature::from(bytes))
-    }
-
-    pub fn test() -> Signature {
-        Signature(ed25519_consensus::Signature::from([0; 64]))
-    }
 }
 
 impl From<ed25519_consensus::Signature> for Signature {
@@ -102,10 +94,6 @@ impl PrivateKey {
     pub fn sign(&self, msg: &[u8]) -> Signature {
         Signature(self.0.sign(msg))
     }
-
-    pub fn inner(&self) -> &ed25519_consensus::SigningKey {
-        &self.0
-    }
 }
 
 impl From<[u8; 32]> for PrivateKey {
@@ -136,18 +124,10 @@ impl PublicKey {
         Self(key.into())
     }
 
-    pub fn as_bytes(&self) -> &[u8; 32] {
-        self.0.as_bytes()
-    }
-
     pub fn verify(&self, msg: &[u8], signature: &Signature) -> Result<(), signature::Error> {
         self.0
             .verify(signature.inner(), msg)
             .map_err(|_| signature::Error::new())
-    }
-
-    pub fn inner(&self) -> &ed25519_consensus::VerificationKey {
-        &self.0
     }
 }
 
