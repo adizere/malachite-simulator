@@ -6,8 +6,9 @@
 // Each peer is a simple data structure. Messages passing via direct
 // function calls.
 //
-// The experience of building a system on top of Malachite in this example
-// should be no different from building on top of an SQLite instance.
+// TODO (This will take time) --
+//  The experience of building a system on top of Malachite in this example
+//  should be no different from building on top of an SQLite instance.
 
 use crossbeam_channel::Sender;
 use std::process::exit;

@@ -142,29 +142,6 @@ impl SystemSimulator {
         }
     }
 
-    // Run for a limited amount of time
-    #[cfg(test)]
-    pub fn run_timed(&mut self, states: &mut Vec<State<BaseContext>>, timeout: Duration) {
-        use std::time::Instant;
-        use tracing::warn;
-
-        self.initialize_system(states);
-        let start = Instant::now();
-
-        // Busy loop to orchestrate among peers
-        loop {
-            // Pick the next envelope from the network and demultiplex it
-            self.step(states);
-
-            let duration = Instant::now().duration_since(start);
-            if duration >= timeout {
-                return;
-            }
-
-            warn!(time = ?duration, "elapsed");
-        }
-    }
-
     fn initialize_system(&mut self, states: &mut Vec<State<BaseContext>>) {
         let span = span!(Level::INFO, "initialize_system");
         let _enter = span.enter();
@@ -244,23 +221,55 @@ impl SystemSimulator {
 
 #[cfg(test)]
 mod tests {
+
+    use std::sync::mpsc::TryRecvError;
+
     use crate::context::value::BaseValue;
     use crate::system::SystemSimulator;
-    use std::time::Duration;
 
     #[test]
     fn basic_proposal_decisions() {
-        let value = BaseValue(45);
+        const PEER_SET_SIZE: u32 = 4;
 
-        let (mut n, mut states, proposals, decisions) = SystemSimulator::new(4);
+        let (mut n, mut states, proposals, decisions) = SystemSimulator::new(PEER_SET_SIZE);
+        n.initialize_system(&mut states);
+        let mut proposal = 45;
+        let mut peer_count = 0;
 
-        proposals
-            .send(value)
-            .expect("could not send value to be proposed");
+        for _i in 0..10 {
+            // Create a value to be proposed
+            proposals
+                .send(BaseValue(proposal))
+                .expect("could not send value to be proposed");
 
-        n.run_timed(&mut states, Duration::from_secs(1));
+            println!("sent proposal {}", proposal);
 
-        let d = decisions.recv().unwrap().value_id.0;
-        assert_eq!(d, value.0);
+            loop {
+                // Let the system simulator take another step
+                n.step(&mut states);
+
+                // Check if the system reached a decision
+                match decisions.try_recv() {
+                    Ok(v) => {
+                        println!("found decision {} from peer {}", v.value_id, v.peer);
+                        let current_decision = v.value_id.0;
+                        assert_eq!(current_decision, proposal);
+                        peer_count += 1;
+
+                        if peer_count == PEER_SET_SIZE {
+                            // If all peers reached decision was reached, quit the inner loop
+                            break;
+                        }
+                    }
+                    Err(TryRecvError::Empty) => {
+                        // Keep trying, there was no decision yet
+                    }
+                    Err(_) => panic!("disconnected channel with decisions"),
+                }
+            }
+
+            proposal += 1;
+            peer_count = 0;
+        }
     }
 }

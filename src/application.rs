@@ -114,7 +114,7 @@ impl Application {
         Ok(Resume::Continue)
     }
 
-    fn handle_broadcast(
+    fn handle_publish(
         &self,
         v: SignedConsensusMsg<BaseContext>,
         peer_params: &Params<BaseContext>,
@@ -268,9 +268,9 @@ impl Application {
                 Ok(c.resume_with(()))
             }
             Effect::Publish(v, c) => {
-                info!("Publish {}", pretty_broadcast(&v));
+                info!("Publish {}", pretty_publish(&v));
 
-                let _ = self.handle_broadcast(v, peer_params).unwrap();
+                let _ = self.handle_publish(v, peer_params).unwrap();
 
                 Ok(c.resume_with(()))
             }
@@ -344,7 +344,7 @@ impl Application {
     }
 }
 
-fn pretty_broadcast(v: &SignedConsensusMsg<BaseContext>) -> String {
+fn pretty_publish(v: &SignedConsensusMsg<BaseContext>) -> String {
     match v {
         SignedConsensusMsg::Vote(ref sv) => sv.to_string(),
         SignedConsensusMsg::Proposal(ref sp) => sp.to_string(),
