@@ -18,20 +18,21 @@ use crate::context::value::BaseValue;
 use crate::context::BaseContext;
 use crate::decision::Decision;
 
-/// The delay between each consecutive step the system takes.
+/// The delay between each consecutive step the simulator takes.
 pub const STEP_DELAY: Duration = Duration::from_millis(200);
 
 /// A system simulator represents:
 ///
-/// - The state of all peers, namely params, metrics, application logic.
-/// - The environment for executing the application and producing decisions.
+/// - Some state of peers, namely params, metrics, application logic.
+/// - The environment for executing the application and producing decisions: the network
+///     layer which is simulated.
 ///
-/// Upon triggering `run`, the system will:
+/// Upon triggering `run`, the simulator will:
 ///
 /// - Pick arbitrary peers,
 /// - Execute the peer's local state, e.g., send consensus messages, verify signatures.
 /// - Eventually produce decisions that are streamed to outside the system through a `Receiver`.
-pub struct SystemSimulator {
+pub struct Simulator {
     /// Params of each peer.
     params: HashMap<BasePeerAddress, Params<BaseContext>>,
 
@@ -46,7 +47,7 @@ pub struct SystemSimulator {
     network_rx: Receiver<Envelope>,
 }
 
-impl SystemSimulator {
+impl Simulator {
     /// Creates a new system simulator consisting of `size` number of peers.
     /// Each peer is a validator in the system.
     ///
@@ -54,7 +55,7 @@ impl SystemSimulator {
     pub fn new(
         size: u32,
     ) -> (
-        SystemSimulator,
+        Simulator,
         Vec<State<BaseContext>>,
         cbc::Sender<BaseValue>, // Proposals (input to the system)
         Receiver<Decision>,     // Decisions (output of the system)
@@ -115,7 +116,7 @@ impl SystemSimulator {
         }
 
         (
-            SystemSimulator {
+            Simulator {
                 params,
                 metrics: HashMap::new(), // Initialize later, at `bootstrap` time
                 apps,
@@ -225,13 +226,13 @@ mod tests {
     use std::sync::mpsc::TryRecvError;
 
     use crate::context::value::BaseValue;
-    use crate::system::SystemSimulator;
+    use crate::simulator::Simulator;
 
     #[test]
     fn basic_proposal_decisions() {
         const PEER_SET_SIZE: u32 = 4;
 
-        let (mut n, mut states, proposals, decisions) = SystemSimulator::new(PEER_SET_SIZE);
+        let (mut n, mut states, proposals, decisions) = Simulator::new(PEER_SET_SIZE);
         n.initialize_system(&mut states);
         let mut proposal = 45;
         let mut peer_count = 0;

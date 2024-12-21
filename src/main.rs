@@ -20,20 +20,20 @@ use tracing_subscriber::EnvFilter;
 
 use crate::context::value::BaseValue;
 use crate::decision::Decision;
-use crate::system::SystemSimulator;
+use crate::simulator::Simulator;
 
 mod application;
 mod common;
 mod context;
 mod decision;
-mod system;
+mod simulator;
 
 fn main() {
     // Some sensible defaults to make logging work
     init();
 
     // Create a network of 4 peers
-    let (mut n, mut states, proposals, decisions) = SystemSimulator::new(4);
+    let (mut n, mut states, proposals, decisions) = Simulator::new(4);
 
     // Spawn a thread that produces values to be proposed
     produce_proposals_background(proposals);
