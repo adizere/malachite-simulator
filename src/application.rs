@@ -1,6 +1,7 @@
+use std::sync::mpsc;
 use crossbeam_channel as cbc;
 use std::sync::mpsc::Sender;
-use tracing::{debug, info, span, trace, Level};
+use tracing::{debug, info, span, trace, warn, Level};
 
 use malachite_core_consensus::{
     ConsensusMsg, Effect, Error, Input, Params, ProposedValue, Resumable, Resume,
@@ -18,9 +19,9 @@ use crate::context::peer_set::BasePeerSet;
 use crate::context::value::BaseValue;
 use crate::context::BaseContext;
 use crate::decision::Decision;
-use crate::multi::MultiProposer;
+use crate::multi::{MultiPropBlock, MultiProposer};
 
-/// Represents an [`Input`] message that the application logic
+/// Wraps an [`Input`] message that the application logic
 /// at a certain peers sends to another peer, potentially to self.
 pub struct Envelope {
     pub source: BasePeerAddress,
@@ -32,18 +33,18 @@ pub struct Envelope {
 /// at a specific peer.
 ///
 /// It contains:
-/// (1) a reference to a [`Sender`], which it uses
-/// to transmit [`Input`]s to itself and other application instances
-/// running at other peers.
+/// (1) a reference to a [`Sender`], which it uses to transmit
+/// [`Input`]s to itself and other application instances running
+/// at other peers.
 ///
-/// (2) a reference to a [`Sender`] to
-/// communicate to the outside environment (the system) each
-/// [`Decision`] this local application took.
+/// (2) a reference to a [`Sender`] to communicate to
+/// the outside environment (the system) each [`Decision`]
+/// this local application took.
 ///
 /// (3) reference to a [`Receiver`] that provides to the app
 /// the values to propose in each new height.
 ///
-/// The application is a wrapper over the malachite consensus state
+/// The Application is a wrapper over the malachite consensus state
 /// machine. It calls `malachite::process!` and handles
 /// [`Effect`]s produced by the consensus library.
 pub struct Application {
@@ -57,11 +58,44 @@ pub struct Application {
 
     // Consume the possible values that will be proposed
     pub proposal_rx: cbc::Receiver<BaseValue>,
+
+    // Todo: Fix the hack later
+    // The receiver side: consume the block.
+    // In `get_value` we consume each block and send it as a Proposal
+    pub hacky_multi_prop_rx: mpsc::Receiver<MultiPropBlock>,
+
+    // Todo: Fix the hack later
+    // The sender side: cache the block here to be used
+    // later, in `get_value` specifically
+    pub hacky_multi_prop_tx: Sender<MultiPropBlock>
 }
 
 impl MultiProposer for Application {
-    fn get_proposal_part(&self, _h: BaseHeight, _r: Round) -> BaseValue {
-        return BaseValue(144);
+    fn get_single_prop(&self, h: BaseHeight, _r: Round) -> BaseValue {
+        let val = (144 + self.peer_id.0) as u64 + h.0;
+        debug!(height = ?h, val = val, "Adding a single proposal part at {}", self.peer_id);
+        BaseValue(val)
+    }
+
+    fn handle_multi_prop(&self, cert: &CommitCertificate<BaseContext>) {
+        info!("multi proposer decision arrived!");
+        let mut block = MultiPropBlock {
+            height: cert.height,
+            values: vec![]
+        };
+
+        for s in cert.aggregated_signature.signatures.iter() {
+            if let Some(ext) = &s.extension {
+                let value = BaseValue::from_bytes(&ext.message.data);
+                info!("signature from {} with ext {}", s.address, value);
+                block.values.push(value);
+            } else {
+                // Todo: no need to panic here, but simpler to do this way first
+                panic!("signature from {} with no extension", s.address);
+            }
+        }
+        self.hacky_multi_prop_tx.send(block).expect("TODO: panic message");
+        info!("multi proposer decision cached!");
     }
 }
 
@@ -182,10 +216,7 @@ impl Application {
         certificate: CommitCertificate<BaseContext>,
         peer_params: &Params<BaseContext>,
     ) -> Result<Resume<BaseContext>, String> {
-        println!("decision arrived!");
-        for s in certificate.aggregated_signature.signatures.iter() {
-            println!("signature from {:?} with ext {:?}", s.address, s.extension);
-        }
+        self.handle_multi_prop(&certificate);
 
         // Let the top-level system/environment know about this decision
         self.decision_tx
@@ -217,7 +248,21 @@ impl Application {
     // Register this input in the inbox of the current validator.
     // If no value is available, the application blocks waiting.
     fn handle_get_value(&self, h: BaseHeight, r: Round) -> Result<Resume<BaseContext>, String> {
-        let value = self.proposal_rx.try_recv().or_else(|_| Err("no value"))?;
+        // let value = self.proposal_rx.try_recv().or_else(|_| Err("no value"))?;
+
+        let mvalue = self.hacky_multi_prop_rx.try_recv();
+        let value = match mvalue {
+            Ok(v) => {
+                info!("found value, using first as ValueToPropose as a workaround");
+                // We cannot send the whole MultiBlock as value in ValueToPropose yet, workaround it
+                v.values.first().unwrap().clone()
+            }
+            Err(_) => {
+                warn!("found no value, using the tip as a workaround");
+                BaseValue(46)
+            }
+        };
+
 
         let input_value = ValueToPropose {
             height: h,
@@ -246,7 +291,7 @@ impl Application {
         assert_eq!(peer_params.address, self.peer_id);
 
         let peer_id = peer_params.address;
-        let span = span!(Level::INFO, "handle_effect for peer", "{}", peer_id.0);
+        let span = span!(Level::INFO, "handle_effect", peer = peer_id.0);
         let _enter = span.enter();
 
         match effect {
@@ -289,6 +334,8 @@ impl Application {
             Effect::GetValue(h, r, _, c) => {
                 trace!("GetValue");
 
+                // This is the point at which we can canonicalize the set of
+                // extensions this process has seen so far
                 let _ = self.handle_get_value(h, r).unwrap();
 
                 Ok(c.resume_with(()))
@@ -301,12 +348,15 @@ impl Application {
 
                 Ok(c.resume_with(Some(val_set)))
             }
-            Effect::VerifySignature(m, _, c) => {
-                trace!("VerifySignature {}", pretty_verify_signature(m));
-
-                // Consider implementing this to be able to capture more realistic
-                // conditions.
-                // Not required right now, given the current use of this application.
+            Effect::VerifySignature(m, _pk, c) => {
+                if sender_is(&m, &self.peer_id) {
+                    // No need to verify signature if the sender is self
+                } else {
+                    trace!("VerifySignature {}", pretty_verify_signature(m));
+                    // Consider implementing this to be able to capture more realistic
+                    // conditions.
+                    // Not required right now, given the current use of this application.
+                }
 
                 Ok(c.resume_with(true))
             }
@@ -331,7 +381,9 @@ impl Application {
             }
             Effect::SignVote(v, c) => {
                 let ext = if v.vote_type == VoteType::Precommit {
-                    let part = self.get_proposal_part(v.height, v.round);
+                    // Allow the application to cast their proposal here,
+                    // which will become part of a MultiPropBlock
+                    let part = self.get_single_prop(v.height, v.round);
                     Some(part)
                 } else {
                     None
@@ -358,6 +410,18 @@ impl Application {
             Effect::VerifyCertificate(_, _, _, _) => {
                 panic!("unimplemented arm Effect::VerifyCertificate in match effect")
             }
+        }
+    }
+}
+
+// Returns true if the message `m` is sent by the peer equal to `other`.
+fn sender_is(m: &SignedMessage<BaseContext, ConsensusMsg<BaseContext>>, other: &BasePeerAddress) -> bool {
+    match &m.message {
+        ConsensusMsg::Vote(v) => {
+            v.voter == *other
+        }
+        ConsensusMsg::Proposal(p) => {
+            p.proposer == *other
         }
     }
 }

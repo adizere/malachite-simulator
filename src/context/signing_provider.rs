@@ -35,8 +35,6 @@ impl BaseSigningProvider {
                 let extension = Extension::new(value.to_bytes());
                 let ext_signature = self.private_key.sign(&extension.data);
                 let vote_wext = vote.extend(SignedMessage::new(extension, ext_signature));
-                println!("added ext to {:?} at peer {}: {:?}", vote_wext.vote_type, vote_wext.voter, vote_wext.extension);
-
                 vote_wext
             },
             None => vote,

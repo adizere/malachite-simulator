@@ -3,7 +3,7 @@ use std::fmt;
 
 use crate::context::address::BasePeerAddress;
 use crate::context::height::BaseHeight;
-use crate::context::value::BaseValueId;
+use crate::context::value::{BaseValue, BaseValueId};
 use crate::context::BaseContext;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -28,10 +28,12 @@ impl BaseVote {
 
 impl fmt::Display for BaseVote {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let xt = self.extension.clone()
+            .map_or("".to_string(), |x| BaseValue::from_bytes(&x.message.data).to_string());
         write!(
             f,
-            "{:?} / {} / {} / {:?} / {} X[{:?}]",
-            self.vote_type, self.height, self.round, self.value_id, self.voter, self.extension
+            "{:?} / {} / {} / {:?} / {} X={}",
+            self.vote_type, self.height, self.round, self.value_id, self.voter, xt
         )
     }
 }

@@ -103,6 +103,9 @@ impl Simulator {
             let s = State::new(ctx.clone(), p);
             states.push(s);
 
+            // create the multi block proposer caches
+            let (mbtx, mbrx) = mpsc::channel();
+
             // Register the application corresponding to this peer
             apps.insert(
                 peer_addr,
@@ -111,6 +114,8 @@ impl Simulator {
                     network_tx: ntx.clone(),
                     decision_tx: dtx.clone(),
                     proposal_rx: pr.clone(),
+                    hacky_multi_prop_rx: mbrx,
+                    hacky_multi_prop_tx: mbtx,
                 },
             );
         }

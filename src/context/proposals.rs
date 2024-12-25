@@ -32,7 +32,7 @@ impl fmt::Display for BaseProposal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Proposal / {} / {} / {:?} / <- {}",
+            "Proposal / {} / {} / {:?} / {}",
             self.height, self.round, self.value, self.proposer
         )
     }
