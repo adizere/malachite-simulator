@@ -4,7 +4,10 @@ use tracing::debug;
 use malachite_core_types::{Extension, SignedMessage, SigningProvider, Vote};
 
 use super::{
-    signing_scheme::{PrivateKey, PublicKey}, value::BaseValue, vote::BaseVote, BaseContext
+    signing_scheme::{PrivateKey, PublicKey},
+    value::BaseValue,
+    vote::BaseVote,
+    BaseContext,
 };
 use crate::context::signing_scheme::Ed25519;
 
@@ -29,19 +32,26 @@ impl BaseSigningProvider {
         self.private_key.public_key()
     }
 
-    pub fn sign_vote_extended(&self, vote: BaseVote, ex: Option<BaseValue>) -> SignedMessage<BaseContext,BaseVote> {
+    pub fn sign_vote_extended(
+        &self,
+        vote: BaseVote,
+        ex: Option<BaseValue>,
+    ) -> SignedMessage<BaseContext, BaseVote> {
         let vote = match ex {
             Some(value) => {
                 let extension = Extension::new(value.to_bytes());
                 let ext_signature = self.private_key.sign(&extension.data);
                 let vote_wext = vote.extend(SignedMessage::new(extension, ext_signature));
-                println!("added ext to {:?} at peer {}: {:?}", vote_wext.vote_type, vote_wext.voter, vote_wext.extension);
+                println!(
+                    "added ext to {:?} at peer {}: {:?}",
+                    vote_wext.vote_type, vote_wext.voter, vote_wext.extension
+                );
 
                 vote_wext
-            },
+            }
             None => vote,
         };
-        
+
         self.sign_vote(vote)
     }
 }

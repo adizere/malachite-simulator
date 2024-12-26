@@ -21,29 +21,32 @@ use crate::decision::Decision;
 /// The delay between each consecutive step the simulator takes.
 pub const STEP_DELAY: Duration = Duration::from_millis(200);
 
+/// A stream of [`BaseValue`].
+/// Each value is treated as a Proposal to consensus.
+type ProposalsSender = cbc::Sender<BaseValue>;
+
+/// A stream of [`Decision`]s.
+/// Each decision is a value that consensus has finalized.
+type DecisionsReceiver = Receiver<Decision>;
+
 /// A system simulator represents:
 ///
-/// - Some state of peers, namely params, metrics, application logic.
+/// - Some state of peers, namely: params, metrics, and application logic.
 /// - The environment for executing the application and producing decisions: the network
-///     layer which is simulated.
+///     layer, which is simulated in this case.
 ///
-/// Upon triggering `run`, the simulator will:
-///
-/// - Pick arbitrary peers,
-/// - Execute the peer's local state, e.g., send consensus messages, verify signatures.
-/// - Eventually produce decisions that are streamed to outside the system through a `Receiver`.
 pub struct Simulator {
-    /// Params of each peer.
+    // Params of each peer.
     params: HashMap<BasePeerAddress, Params<BaseContext>>,
 
-    /// The metrics of each peer.
+    // The metrics of each peer.
     metrics: HashMap<BasePeerAddress, Metrics>,
 
-    // The application logic associated with each peer
+    // The application logic associated with each peer.
     apps: HashMap<BasePeerAddress, Application>,
 
-    // Simulates the networking layer, receiver-side
-    // The sender-side is registered in all applications
+    // Simulates the receiver-side of the networking layer.
+    // The sender-side of networking is registered in each application.
     network_rx: Receiver<Envelope>,
 }
 
@@ -56,9 +59,9 @@ impl Simulator {
         size: u32,
     ) -> (
         Simulator,
-        Vec<State<BaseContext>>,
-        cbc::Sender<BaseValue>, // Proposals (input to the system)
-        Receiver<Decision>,     // Decisions (output of the system)
+        Vec<State<BaseContext>>, // The consensus state of peers
+        ProposalsSender,         // Send proposals (inputs to the system)
+        DecisionsReceiver,       // Receive decisions (outputs of the system)
     ) {
         assert!(size >= 4);
         assert!(size < 25);
@@ -68,10 +71,10 @@ impl Simulator {
 
         // Crossbeam channel on which `BaseValue` proposals pass from the environment into
         // application logic.
-        // This is the mempool would be in a real application.
+        // This would be the mempool in a real application.
         let (ps, pr) = cbc::bounded(5);
 
-        // Channel on which to send/receive the decisions
+        // Channel on which to send/receive the decisions.
         let (dtx, drx) = mpsc::channel();
 
         let mut states = vec![];
@@ -96,7 +99,7 @@ impl Simulator {
                 value_payload: ValuePayload::ProposalOnly,
             };
 
-            // The params at this specific peer
+            // The params for this specific peer
             params.insert(peer_addr, p.clone());
 
             // The state at this specific peer
@@ -129,7 +132,7 @@ impl Simulator {
     }
 
     /// Orchestrate the execution of this system across the network of all peers.
-    /// Running this will start producing decisions.
+    /// Running this will start producing [`Decision`]s.
     pub fn run(&mut self, states: &mut Vec<State<BaseContext>>) {
         self.initialize_system(states);
 
@@ -150,8 +153,8 @@ impl Simulator {
         for (_, peer_state) in states.iter_mut().enumerate() {
             let peer_addr = peer_state.params.address.clone();
 
-            // Potentially a future refactor: Remove the self.params and
-            // use the ones from peer_states instead.
+            // Potentially a future refactor: Remove `self.params` and
+            // use the ones from `states` instead.
             let peer_params = self
                 .params
                 .get(&peer_addr)
@@ -172,8 +175,9 @@ impl Simulator {
         info!("done");
     }
 
-    // Demultiplex among the incoming networking envelopes and call the corresponding
-    // to handle the `Input`
+    // Demultiplex among the networking envelopes incoming from `network_rx`, then
+    // calls the corresponding application logic to handle the `Input`.
+    // Blocks in case there is no envelope to handle.
     fn step(&mut self, states: &mut Vec<State<BaseContext>>) {
         let network_env = self.network_rx.recv();
         match network_env {
@@ -258,7 +262,7 @@ mod tests {
                         peer_count += 1;
 
                         if peer_count == PEER_SET_SIZE {
-                            // If all peers reached decision was reached, quit the inner loop
+                            // If all peers reached a decision, quit the inner loop
                             break;
                         }
                     }
