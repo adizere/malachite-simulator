@@ -255,7 +255,6 @@ impl Simulator {
 
 #[cfg(test)]
 mod tests {
-
     use std::sync::mpsc::TryRecvError;
 
     use crate::context::value::BaseValue;

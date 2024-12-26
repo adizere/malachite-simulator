@@ -1,26 +1,25 @@
-// The loopback example demonstrates the simplest way to instantiate
-// the Malachite library.
-//
-// We will use a purely local instance of Malachite. The approach is to
-// simulate everything, the network, signing, mempool, etc.
-// Each peer is a simple data structure. Messages passing via direct
-// function calls.
-//
-// TODO (This will take time) --
-//  The experience of building a system on top of Malachite in this example
-//  should be no different from building on top of an SQLite instance.
-
-use crossbeam_channel::Sender;
+/// Demonstrates the simplest way to instantiate the Malachite
+/// core library.
+///
+/// The approach is to simulate everything: the network, signing, mempool, ...
+///
+/// The [`Simulator`] will act as the abstraction that ties together the
+/// execution of the Malachite core library across multiple peers, under
+/// simulated conditions.
+///
+/// Each peer is a simple data structure running in the same thread as all the
+/// other peers.
+/// The [`Simulator`] will orchestrate among different peers and the networking layer.
+///
+/// See the top-level README.md for more details.
 use std::process::exit;
-use std::sync::mpsc::Receiver;
 use std::thread;
 use tracing::level_filters::LevelFilter;
 use tracing::{error, warn};
 use tracing_subscriber::EnvFilter;
 
 use crate::context::value::BaseValue;
-use crate::decision::Decision;
-use crate::simulator::Simulator;
+use crate::simulator::{DecisionsReceiver, ProposalsSender, Simulator};
 
 mod application;
 mod common;
@@ -41,6 +40,7 @@ fn main() {
     // Spawn a thread in the background that handles decided values
     consume_decisions_background(decisions);
 
+    // Run the system
     // Blocking method, starts the network and handles orchestration of
     // block building
     n.run(&mut states);
@@ -48,8 +48,9 @@ fn main() {
     // Todo: Clean stop
 }
 
-fn produce_proposals_background(proposals: Sender<BaseValue>) {
+fn produce_proposals_background(proposals: ProposalsSender) {
     let mut counter = 45;
+
     thread::spawn(move || loop {
         proposals
             .send(BaseValue(counter))
@@ -60,7 +61,7 @@ fn produce_proposals_background(proposals: Sender<BaseValue>) {
     });
 }
 
-fn consume_decisions_background(rx: Receiver<Decision>) {
+fn consume_decisions_background(rx: DecisionsReceiver) {
     thread::spawn(move || {
         // Busy loop, simply consume the decided heights
         loop {
