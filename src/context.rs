@@ -43,7 +43,6 @@ impl BaseContext {
     }
 }
 
-#[allow(unused_variables)]
 impl Context for BaseContext {
     type Address = BasePeerAddress;
     type Height = BaseHeight;
@@ -53,27 +52,31 @@ impl Context for BaseContext {
     type ValidatorSet = BasePeerSet;
     type Value = BaseValue;
     type Vote = BaseVote;
-    type SigningProvider = BaseSigningProvider;
     type SigningScheme = signing_scheme::Ed25519;
+    type SigningProvider = BaseSigningProvider;
 
     fn select_proposer<'a>(
         &self,
         validator_set: &'a Self::ValidatorSet,
-        height: Self::Height,
-        round: Round,
+        _height: Self::Height,
+        _round: Round,
     ) -> &'a Self::Validator {
         // Keep it simple, the proposer is always the same peer
         validator_set
             .peers
-            .get(0)
+            .first()
             .expect("no peer found in the validator set")
+    }
+
+    fn signing_provider(&self) -> &Self::SigningProvider {
+        &self.signing_provider
     }
 
     fn new_proposal(
         height: Self::Height,
         round: Round,
         value: Self::Value,
-        pol_round: Round,
+        _pol_round: Round,
         address: Self::Address,
     ) -> Self::Proposal {
         BaseProposal {
@@ -116,9 +119,5 @@ impl Context for BaseContext {
             voter: address,
             extension: None,
         }
-    }
-
-    fn signing_provider(&self) -> &Self::SigningProvider {
-        &self.signing_provider
     }
 }

@@ -1,8 +1,6 @@
 use std::fmt;
 
-use malachite_core_types::{Address, Context};
-
-use crate::context::BaseContext;
+use malachite_core_types::Address;
 
 /// The simplest representation of an address in the network.
 /// Implements [`Address`].
@@ -10,7 +8,7 @@ use crate::context::BaseContext;
 pub struct BasePeerAddress(pub u32);
 
 impl BasePeerAddress {
-    pub fn new(address: u32) -> <BaseContext as Context>::Address {
+    pub fn new(address: u32) -> Self {
         Self(address)
     }
 }

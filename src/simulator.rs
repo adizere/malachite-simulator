@@ -1,7 +1,7 @@
 use crossbeam_channel as cbc;
 use std::collections::HashMap;
 use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 use tracing::{debug, error, info, span, trace, Level};
@@ -9,7 +9,7 @@ use tracing::{debug, error, info, span, trace, Level};
 use malachite_core_consensus::{Error, Input, Params, State, ValuePayload};
 use malachite_metrics::Metrics;
 
-use crate::application::{Application, Envelope};
+use crate::application::Application;
 use crate::common;
 use crate::context::address::BasePeerAddress;
 use crate::context::height::BaseHeight;
@@ -21,13 +21,42 @@ use crate::decision::Decision;
 /// The delay between each consecutive step the simulator takes.
 pub const STEP_DELAY: Duration = Duration::from_millis(200);
 
-/// A stream of [`BaseValue`].
+/// A stream of [`BaseValue`]s.
 /// Each value is treated as a Proposal to consensus.
-type ProposalsSender = cbc::Sender<BaseValue>;
+pub type ProposalsSender = cbc::Sender<BaseValue>;
+
+/// A stream of [`BaseValue`]s as the application receives them.
+/// The application treats these values as Proposals.
+pub type ProposalsReceiver = cbc::Receiver<BaseValue>;
+
+/// A stream of [`Decision`]s from the point of view of the application,
+/// which sends them.
+pub type DecisionsSender = Sender<Decision>;
 
 /// A stream of [`Decision`]s.
 /// Each decision is a value that consensus has finalized.
-type DecisionsReceiver = Receiver<Decision>;
+pub type DecisionsReceiver = Receiver<Decision>;
+
+/// The sending side of the networking layer.
+/// Each message in the network is an [`Envelope`]s.
+/// The [`Application`] logic at various peers sent these messages.
+pub type NetSender = Sender<Envelope>;
+
+/// The receiving side of the networking layer.
+/// The [`Simulator`] takes each message from this queue and applies that
+/// message to the appropriate peer.
+pub type NetReceiver = Receiver<Envelope>;
+
+/// Represents a message with an [`Input`] to the application logic
+/// at a certain peer.
+///
+/// Peers send envelopes to one another, potentially to themselves in the
+/// process of reaching consensus on a decision.
+pub struct Envelope {
+    pub source: BasePeerAddress,
+    pub destination: BasePeerAddress,
+    pub payload: Input<BaseContext>,
+}
 
 /// A system simulator represents:
 ///
@@ -47,7 +76,7 @@ pub struct Simulator {
 
     // Simulates the receiver-side of the networking layer.
     // The sender-side of networking is registered in each application.
-    network_rx: Receiver<Envelope>,
+    network_rx: NetReceiver,
 }
 
 impl Simulator {
@@ -133,7 +162,7 @@ impl Simulator {
 
     /// Orchestrate the execution of this system across the network of all peers.
     /// Running this will start producing [`Decision`]s.
-    pub fn run(&mut self, states: &mut Vec<State<BaseContext>>) {
+    pub fn run(&mut self, states: &mut [State<BaseContext>]) {
         self.initialize_system(states);
 
         // Busy loop to orchestrate among peers
@@ -146,12 +175,12 @@ impl Simulator {
         }
     }
 
-    fn initialize_system(&mut self, states: &mut Vec<State<BaseContext>>) {
+    fn initialize_system(&mut self, states: &mut [State<BaseContext>]) {
         let span = span!(Level::INFO, "initialize_system");
         let _enter = span.enter();
 
-        for (_, peer_state) in states.iter_mut().enumerate() {
-            let peer_addr = peer_state.params.address.clone();
+        for peer_state in states.iter_mut() {
+            let peer_addr = peer_state.params.address;
 
             // Potentially a future refactor: Remove `self.params` and
             // use the ones from `states` instead.
@@ -178,7 +207,7 @@ impl Simulator {
     // Demultiplex among the networking envelopes incoming from `network_rx`, then
     // calls the corresponding application logic to handle the `Input`.
     // Blocks in case there is no envelope to handle.
-    fn step(&mut self, states: &mut Vec<State<BaseContext>>) {
+    fn step(&mut self, states: &mut [State<BaseContext>]) {
         let network_env = self.network_rx.recv();
         match network_env {
             Ok(envelope) => self.step_with_envelope(states, envelope),
@@ -188,7 +217,7 @@ impl Simulator {
         }
     }
 
-    fn step_with_envelope(&self, states: &mut Vec<State<BaseContext>>, envelope: Envelope) {
+    fn step_with_envelope(&self, states: &mut [State<BaseContext>], envelope: Envelope) {
         let peer_addr = envelope.destination;
 
         let peer_state = states.get_mut(peer_addr.0 as usize).unwrap();
@@ -258,6 +287,7 @@ mod tests {
                     Ok(v) => {
                         println!("found decision {} from peer {}", v.value_id, v.peer);
                         let current_decision = v.value_id.0;
+
                         assert_eq!(current_decision, proposal);
                         peer_count += 1;
 

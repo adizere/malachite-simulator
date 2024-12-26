@@ -1,12 +1,10 @@
 use rand::rngs::OsRng;
 use tracing::debug;
 
-use malachite_core_types::{Extension, SignedMessage, SigningProvider, Vote};
+use malachite_core_types::{SignedMessage, SigningProvider};
 
 use super::{
     signing_scheme::{PrivateKey, PublicKey},
-    value::BaseValue,
-    vote::BaseVote,
     BaseContext,
 };
 use crate::context::signing_scheme::Ed25519;
@@ -18,8 +16,8 @@ pub struct BaseSigningProvider {
 
 impl BaseSigningProvider {
     pub fn new() -> BaseSigningProvider {
-        let csprng = OsRng;
-        let signing_key = Ed25519::generate_keypair(csprng);
+        let cprng = OsRng;
+        let signing_key = Ed25519::generate_keypair(cprng);
 
         debug!(public_key = ?signing_key.public_key(), "created new signing provider");
 
@@ -31,29 +29,6 @@ impl BaseSigningProvider {
     pub fn public_key(&self) -> PublicKey {
         self.private_key.public_key()
     }
-
-    pub fn sign_vote_extended(
-        &self,
-        vote: BaseVote,
-        ex: Option<BaseValue>,
-    ) -> SignedMessage<BaseContext, BaseVote> {
-        let vote = match ex {
-            Some(value) => {
-                let extension = Extension::new(value.to_bytes());
-                let ext_signature = self.private_key.sign(&extension.data);
-                let vote_wext = vote.extend(SignedMessage::new(extension, ext_signature));
-                println!(
-                    "added ext to {:?} at peer {}: {:?}",
-                    vote_wext.vote_type, vote_wext.voter, vote_wext.extension
-                );
-
-                vote_wext
-            }
-            None => vote,
-        };
-
-        self.sign_vote(vote)
-    }
 }
 
 #[allow(unused)]
@@ -61,10 +36,7 @@ impl SigningProvider<BaseContext> for BaseSigningProvider {
     fn sign_vote(
         &self,
         vote: <BaseContext as malachite_core_types::Context>::Vote,
-    ) -> malachite_core_types::SignedMessage<
-        BaseContext,
-        <BaseContext as malachite_core_types::Context>::Vote,
-    > {
+    ) -> SignedMessage<BaseContext, <BaseContext as malachite_core_types::Context>::Vote> {
         let signature = self.private_key.sign(&vote.to_bytes());
         SignedMessage::new(vote, signature)
     }
@@ -81,10 +53,7 @@ impl SigningProvider<BaseContext> for BaseSigningProvider {
     fn sign_proposal(
         &self,
         proposal: <BaseContext as malachite_core_types::Context>::Proposal,
-    ) -> malachite_core_types::SignedMessage<
-        BaseContext,
-        <BaseContext as malachite_core_types::Context>::Proposal,
-    > {
+    ) -> SignedMessage<BaseContext, <BaseContext as malachite_core_types::Context>::Proposal> {
         let signature = self.private_key.sign(&proposal.to_bytes());
         SignedMessage::new(proposal, signature)
     }

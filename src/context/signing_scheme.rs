@@ -26,12 +26,12 @@ impl SigningScheme for Ed25519 {
     type PublicKey = PublicKey;
     type PrivateKey = PrivateKey;
 
-    fn encode_signature(signature: &Signature) -> Vec<u8> {
-        signature.to_bytes().to_vec()
-    }
-
     fn decode_signature(bytes: &[u8]) -> Result<Self::Signature, Self::DecodingError> {
         Signature::try_from(bytes)
+    }
+
+    fn encode_signature(signature: &Signature) -> Vec<u8> {
+        signature.as_bytes().to_vec()
     }
 }
 
@@ -43,7 +43,7 @@ impl Signature {
         &self.0
     }
 
-    pub fn to_bytes(&self) -> [u8; 64] {
+    pub fn as_bytes(&self) -> [u8; 64] {
         self.0.to_bytes()
     }
 }

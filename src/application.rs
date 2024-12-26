@@ -1,5 +1,3 @@
-use crossbeam_channel as cbc;
-use std::sync::mpsc::Sender;
 use tracing::{debug, info, span, trace, Level};
 
 use malachite_core_consensus::{
@@ -8,54 +6,49 @@ use malachite_core_consensus::{
 };
 use malachite_core_types::{
     CommitCertificate, Height, Round, SignedMessage, SigningProvider, Timeout, TimeoutKind,
-    Validator, Validity, ValueOrigin, VoteType,
+    Validator, Validity, ValueOrigin,
 };
 use malachite_metrics::Metrics;
 
 use crate::context::address::BasePeerAddress;
 use crate::context::height::BaseHeight;
 use crate::context::peer_set::BasePeerSet;
-use crate::context::value::BaseValue;
 use crate::context::BaseContext;
 use crate::decision::Decision;
-
-/// Represents an [`Input`] message that the application logic
-/// at a certain peers sends to another peer, potentially to self.
-pub struct Envelope {
-    pub source: BasePeerAddress,
-    pub destination: BasePeerAddress,
-    pub payload: Input<BaseContext>,
-}
+use crate::simulator::{DecisionsSender, Envelope, NetSender, ProposalsReceiver};
 
 /// An application is the deterministic state machine executing
 /// at a specific peer.
 ///
 /// It contains:
-/// (1) a reference to a [`Sender`], which it uses
-/// to transmit [`Input`]s to itself and other application instances
+///
+/// (1) a [`NetSender`], which it uses to transmit
+/// [`Input`]s to itself or to application instances
 /// running at other peers.
 ///
-/// (2) a reference to a [`Sender`] to
-/// communicate to the outside environment (the system) each
-/// [`Decision`] this local application took.
+/// (2) a [`ProposalsReceiver`] which the app uses to
+/// get values to propose whenever it acts as proposer
+/// in a consensus height.
 ///
-/// (3) reference to a [`Receiver`] that provides to the app
-/// the values to propose in each new height.
+/// (3) a [`DecisionsSender`] to communicate to the
+/// outside environment each [`Decision`] which
+/// this local application took.
 ///
-/// The application is a wrapper over the malachite consensus state
-/// machine. It calls `malachite::process!` and handles
-/// [`Effect`]s produced by the consensus library.
+/// The application is a wrapper over the [`malachite_core_consensus`] library.
+/// In particular, the application calls [`malachite_core_consensus::process!`]
+/// with certain [`Input`]s and handles [`Effect`]s produced by the
+/// consensus library.
 pub struct Application {
     pub peer_id: BasePeerAddress,
 
     /// Send [`Input`]s to the application running at self and other peers.
-    pub network_tx: Sender<Envelope>,
+    pub network_tx: NetSender,
 
     // Send [`Decision`]s to the environment, i.e., the [`System`].
-    pub decision_tx: Sender<Decision>,
+    pub decision_tx: DecisionsSender,
 
-    // Consume the possible values that will be proposed
-    pub proposal_rx: cbc::Receiver<BaseValue>,
+    // Receive the values that this application will propose to consensus
+    pub proposal_rx: ProposalsReceiver,
 }
 
 impl Application {
@@ -119,8 +112,8 @@ impl Application {
         v: SignedConsensusMsg<BaseContext>,
         peer_params: &Params<BaseContext>,
     ) -> Result<Resume<BaseContext>, String> {
-        // Push the signed consensus message into the inbox of all peers
-        // That's all that broadcast entails
+        // Push the signed consensus message into the inbox of all peers.
+        // That's all that broadcast entails.
         for destination in peer_params.initial_validator_set.peers.iter() {
             let destination_addr = destination.address();
             match v {
@@ -155,7 +148,7 @@ impl Application {
                                     height: sp.height,
                                     round: sp.round,
                                     valid_round: Round::Nil,
-                                    proposer: sp.proposer.clone(),
+                                    proposer: sp.proposer,
                                     value: sp.value,
                                     validity: Validity::Valid,
                                     extension: None,
@@ -210,7 +203,7 @@ impl Application {
     // Register this input in the inbox of the current validator.
     // If no value is available, the application blocks waiting.
     fn handle_get_value(&self, h: BaseHeight, r: Round) -> Result<Resume<BaseContext>, String> {
-        let value = self.proposal_rx.try_recv().or_else(|_| Err("no value"))?;
+        let value = self.proposal_rx.try_recv().map_err(|_| "no value")?;
 
         let input_value = ValueToPropose {
             height: h,
@@ -323,13 +316,7 @@ impl Application {
                 Ok(c.resume_with(()))
             }
             Effect::SignVote(v, c) => {
-                let ext = if v.vote_type == VoteType::Precommit {
-                    let part = self.get_proposal_part(v.height, v.round);
-                    Some(part)
-                } else {
-                    None
-                };
-                let sv = context.signing_provider.sign_vote_extended(v, ext);
+                let sv = context.signing_provider.sign_vote(v);
 
                 Ok(c.resume_with(sv))
             }
